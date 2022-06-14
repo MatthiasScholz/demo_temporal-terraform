@@ -43,13 +43,17 @@ func DestroyDemoNetworkWorkflow(ctx workflow.Context, input DestroyDemoNetworkIn
 }
 
 func DestroyVPCActivity(ctx context.Context, input DestroyDemoNetworkInput) error {
-	awsConfig := awsconfig.LoadConfig()
+	awsConfig := awsconfig.LoadConfig("tw-beach-push")
+	creds, err := awsConfig.Credentials.Retrieve(ctx)
+	if err != nil {
+		return err
+	}
 
 	tfa := tfactivity.New(tfworkspace.Config{
 		TerraformPath: "aws/vpc",
 		TerraformFS:   terraform.FS,
 		S3Backend: tfexec.S3BackendConfig{
-			Credentials: awsConfig.Credentials,
+			Credentials: creds,
 			Region:      "us-west-2",
 			Bucket:      "temporal-terraform-demo-state",
 			Key:         fmt.Sprintf("vpc-%s.tfstate", input.Name),
@@ -68,13 +72,17 @@ func DestroyVPCActivity(ctx context.Context, input DestroyDemoNetworkInput) erro
 }
 
 func DestroySubnetsActivity(ctx context.Context, input DestroyDemoNetworkInput) error {
-	awsConfig := awsconfig.LoadConfig()
+	awsConfig := awsconfig.LoadConfig("tw-beach-push")
+	creds, err := awsConfig.Credentials.Retrieve(ctx)
+	if err != nil {
+		return err
+	}
 
 	tfa := tfactivity.New(tfworkspace.Config{
 		TerraformPath: "aws/subnet",
 		TerraformFS:   terraform.FS,
 		S3Backend: tfexec.S3BackendConfig{
-			Credentials: awsConfig.Credentials,
+			Credentials: creds,
 			Region:      "us-west-2",
 			Bucket:      "temporal-terraform-demo-state",
 			Key:         fmt.Sprintf("subnets-%s.tfstate", input.Name),

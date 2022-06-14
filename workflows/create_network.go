@@ -89,7 +89,11 @@ func CreateDemoNetworkWorkflow(ctx workflow.Context, input CreateDemoNetworkInpu
 }
 
 func CreateVPCActivity(ctx context.Context, input CreateVPCInput) (CreateVPCOutput, error) {
-	awsConfig := awsconfig.LoadConfig()
+	awsConfig := awsconfig.LoadConfig("tw-beach-push")
+	creds, err := awsConfig.Credentials.Retrieve(ctx)
+	if err != nil {
+		return CreateVPCOutput{}, err
+	}
 
 	attemptImport := make(map[string]string)
 
@@ -107,7 +111,7 @@ func CreateVPCActivity(ctx context.Context, input CreateVPCInput) (CreateVPCOutp
 		TerraformPath: "aws/vpc",
 		TerraformFS:   terraform.FS,
 		S3Backend: tfexec.S3BackendConfig{
-			Credentials: awsConfig.Credentials,
+			Credentials: creds,
 			Region:      "us-west-2",
 			Bucket:      "temporal-terraform-demo-state",
 			Key:         fmt.Sprintf("vpc-%s.tfstate", input.Name),
@@ -117,7 +121,7 @@ func CreateVPCActivity(ctx context.Context, input CreateVPCInput) (CreateVPCOutp
 	// Apply Terraform
 	applyOutput, err := tfa.Apply(ctx, tfworkspace.ApplyInput{
 		AttemptImport:  attemptImport,
-		AwsCredentials: awsConfig.Credentials,
+		AwsCredentials: creds,
 		Env: map[string]string{
 			"AWS_REGION": input.Region,
 		},
@@ -142,7 +146,11 @@ func CreateVPCActivity(ctx context.Context, input CreateVPCInput) (CreateVPCOutp
 }
 
 func CreateSubnetsActivity(ctx context.Context, input CreateSubnetsInput) (CreateSubnetsOutput, error) {
-	awsConfig := awsconfig.LoadConfig()
+	awsConfig := awsconfig.LoadConfig("tw-beach-push")
+	creds, err := awsConfig.Credentials.Retrieve(ctx)
+	if err != nil {
+		return CreateSubnetsOutput{}, err
+	}
 
 	attemptImport := make(map[string]string)
 
@@ -161,7 +169,7 @@ func CreateSubnetsActivity(ctx context.Context, input CreateSubnetsInput) (Creat
 		TerraformPath: "aws/subnet",
 		TerraformFS:   terraform.FS,
 		S3Backend: tfexec.S3BackendConfig{
-			Credentials: awsConfig.Credentials,
+			Credentials: creds,
 			Region:      "us-west-2",
 			Bucket:      "temporal-terraform-demo-state",
 			Key:         fmt.Sprintf("subnets-%s.tfstate", input.Name),
@@ -179,7 +187,7 @@ func CreateSubnetsActivity(ctx context.Context, input CreateSubnetsInput) (Creat
 
 	// Apply Terraform to create subnets
 	if _, err := tfa.Apply(ctx, tfworkspace.ApplyInput{
-		AwsCredentials: awsConfig.Credentials,
+		AwsCredentials: creds,
 		AttemptImport:  attemptImport,
 		Env: map[string]string{
 			"AWS_REGION": input.Region,

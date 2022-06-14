@@ -10,10 +10,10 @@ deps:
 lint:
 	go vet ./...
 
-build:
+build: deps
 	go build -v ./...
 
-test:
+test: deps
 	AWS_PROFILE=$(profile) go test ./...
 
 login:

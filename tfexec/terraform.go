@@ -52,7 +52,7 @@ type (
 		Key         string
 		Region      string
 		Env         map[string]string
-		Credentials aws.CredentialsProvider
+		Credentials aws.Credentials
 	}
 
 	s3BackendConfigTemplateVars struct {
@@ -118,10 +118,7 @@ func LazyFromPath() NewTerraformFunc {
 }
 
 func InitS3Backend(configBuf *bytes.Buffer, ctx context.Context, params InitParams) error {
-	creds, err := params.Backend.Credentials.Retrieve(ctx)
-	if err != nil {
-		return err
-	}
+	creds := params.Backend.Credentials
 
 	// Ensure backend is configured for s3
 	if err := s3backendConfigTemplate.Execute(configBuf, s3BackendConfigTemplateVars{
