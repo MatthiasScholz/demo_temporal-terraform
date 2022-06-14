@@ -179,6 +179,16 @@ func (t *Terraform) Import(ctx context.Context, params ImportParams) error {
 	return terraformExec(ctx, execParams)
 }
 
+func (t *Terraform) Plan(ctx context.Context, params ApplyParams) error {
+	args, err := t.withVars(params.Vars, []string{"plan", "-no-color", "-input=false"})
+	if err != nil {
+		return err
+	}
+
+	execParams := t.terraformParams(args, params.Env)
+	return terraformExec(ctx, execParams)
+}
+
 func (t *Terraform) Apply(ctx context.Context, params ApplyParams) error {
 	args, err := t.withVars(params.Vars, []string{"apply", "-auto-approve", "-no-color", "-input=false"})
 	if err != nil {

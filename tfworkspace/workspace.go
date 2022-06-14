@@ -3,6 +3,7 @@ package tfworkspace
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -38,8 +39,10 @@ type (
 	}
 
 	Workspace struct {
-		config Config
-		tf     tfexec.NewTerraformFunc
+		config  Config
+		env     Environment
+		workDir string
+		tf      tfexec.NewTerraformFunc
 	}
 )
 
@@ -47,34 +50,36 @@ func New(config Config) *Workspace {
 	return &Workspace{config: config, tf: tfexec.LazyFromPath()}
 }
 
-func (w *Workspace) Apply(ctx context.Context, input ApplyInput) (ApplyOutput, error) {
-	// Create temporary workspace
-	workDir, err := ioutil.TempDir("", "tf-apply-")
+func prepareWorkspace(name string) (workDir string, err error) {
+
+	pattern := fmt.Sprintf("tf-%s-", name)
+	workDir, err = ioutil.TempDir("", pattern)
 	if err != nil {
-		return ApplyOutput{}, fmt.Errorf("error creating terraform workspace: %w", err)
-	}
-	defer os.RemoveAll(workDir)
-
-	// Extract embedded terraform to the workspace
-	if err = extractEmbeddedTerraform(w.config.TerraformFS, w.config.TerraformPath, workDir); err != nil {
-		return ApplyOutput{}, fmt.Errorf("error extracting terraform: %w", err)
+		return "unset due to error", err
 	}
 
-	log.Printf("initializing terraform in directory: %s", workDir)
+	return workDir, nil
+}
 
-	// Initialize terraform workspace
-	tf, err := w.init(ctx, workDir)
-	if err != nil {
-		return ApplyOutput{}, err
-	}
+func cleanupWorkspace(workDir string) error {
+	return os.RemoveAll(workDir)
+}
 
-	// Copy env to a new map
-	env := make(map[string]string, len(input.Env))
+type Environment map[string]string
+
+func makeEnvironment(preallocatedSize int) Environment {
+	return make(Environment, preallocatedSize)
+}
+
+func prepareEnv(input ApplyInput) (env Environment, err error) {
+
+	// Inject provide environment variable settings
+	env = makeEnvironment(len(input.Env) + 3)
 	for k, v := range input.Env {
 		env[k] = v
 	}
 
-	// Add AWS creds to environment
+	// Add AWS creds to environmentV
 	// if input.AwsCredentials != nil {
 	// 	creds, err := input.AwsCredentials.Retrieve(ctx)
 	// 	if err != nil {
@@ -91,17 +96,25 @@ func (w *Workspace) Apply(ctx context.Context, input ApplyInput) (ApplyOutput, e
 	// 	// env["AWS_SECRET_ACCESS_KEY"] = os.Getenv("AWS_SECRET_ACCESS_KEY")
 	// 	// env["AWS_SESSION_TOKEN"] = os.Getenv("AWS_SESSION_TOKEN")
 	// }
-	if !input.AwsCredentials.HasKeys() {
-		log.Fatal("no aws credentials provided")
+	creds := input.AwsCredentials
+	if !creds.HasKeys() {
+		err := errors.New("no aws credentials provided")
+		return env, err
 	}
-	if input.AwsCredentials.Expired() {
-		log.Fatal("aws credentials expired")
+	if creds.Expired() {
+		err := errors.New("aws credentials expired")
+		return env, err
 	}
 
-	env["AWS_ACCESS_KEY_ID"] = input.AwsCredentials.AccessKeyID
-	env["AWS_SECRET_ACCESS_KEY"] = input.AwsCredentials.SecretAccessKey
-	env["AWS_SESSION_TOKEN"] = input.AwsCredentials.SessionToken
+	env["AWS_ACCESS_KEY_ID"] = creds.AccessKeyID
+	env["AWS_SECRET_ACCESS_KEY"] = creds.SecretAccessKey
+	env["AWS_SESSION_TOKEN"] = creds.SessionToken
 
+	return env, nil
+}
+
+// Attempt to import resources that may have not had state pushed on failure
+func handleFailover(ctx context.Context, input ApplyInput, env Environment, tf *tfexec.Terraform) error {
 	// Attempt to import resources that may have not had state pushed on failure
 	for k, v := range input.AttemptImport {
 		// Intentionally ignoring error
@@ -114,17 +127,74 @@ func (w *Workspace) Apply(ctx context.Context, input ApplyInput) (ApplyOutput, e
 
 		// Check for context cancel
 		if ctx.Err() != nil {
-			return ApplyOutput{}, ctx.Err()
+			return ctx.Err()
 		}
 	}
 
-	if err := tf.Apply(ctx, tfexec.ApplyParams{
-		Vars: input.Vars,
-		Env:  env,
-	}); err != nil {
-		return ApplyOutput{}, fmt.Errorf("terraform apply error: %w", err)
+	return nil
+}
+
+func (w *Workspace) Prepare(ctx context.Context, input ApplyInput, name string) (tf *tfexec.Terraform, err error) {
+	// Create temporary workspace
+	workDir, err := prepareWorkspace("apply")
+	if err != nil {
+		return nil, fmt.Errorf("error creating terraform workspace: %w", err)
+	}
+	w.workDir = workDir
+
+	if err = extractEmbeddedTerraform(w.config.TerraformFS, w.config.TerraformPath, workDir); err != nil {
+		return nil, fmt.Errorf("error extracting terraform: %w", err)
+	}
+	log.Printf("initializing terraform in directory: %s", workDir)
+
+	tf, err = w.init(ctx, workDir)
+	if err != nil {
+		return nil, err
 	}
 
+	env, err := prepareEnv(input)
+	if err != nil {
+		return nil, err
+	}
+	w.env = env
+
+	err = handleFailover(ctx, input, env, tf)
+	if err != nil {
+		return nil, ctx.Err()
+	}
+
+	return tf, nil
+}
+
+func (w *Workspace) Cleanup() error {
+	err := cleanupWorkspace(w.workDir)
+	return err
+}
+
+func (w *Workspace) Plan(ctx context.Context, input ApplyInput) (ApplyOutput, error) {
+	tf, err := w.Prepare(ctx, input, "plan")
+	if err != nil {
+		return ApplyOutput{}, err
+	}
+	defer w.Cleanup()
+
+	if err := tf.Plan(ctx, tfexec.ApplyParams{
+		Vars: input.Vars,
+		Env:  w.env,
+	}); err != nil {
+		return ApplyOutput{}, fmt.Errorf("terraform plan error: %w", err)
+	}
+
+	// Extract output from successful Terraform Apply
+	output, err := makeApplyOutput(ctx, w.env, tf)
+	if err != nil {
+		return ApplyOutput{}, err
+	}
+
+	return output, nil
+}
+
+func makeApplyOutput(ctx context.Context, env Environment, tf *tfexec.Terraform) (ApplyOutput, error) {
 	// Extract output from successful Terraform Apply
 	tfOutput, err := tf.Output(ctx, tfexec.OutputParams{
 		Env: env,
@@ -141,6 +211,30 @@ func (w *Workspace) Apply(ctx context.Context, input ApplyInput) (ApplyOutput, e
 	return ApplyOutput{
 		Output: output,
 	}, nil
+
+}
+
+func (w *Workspace) Apply(ctx context.Context, input ApplyInput) (ApplyOutput, error) {
+	tf, err := w.Prepare(ctx, input, "plan")
+	if err != nil {
+		return ApplyOutput{}, err
+	}
+	defer w.Cleanup()
+
+	if err := tf.Apply(ctx, tfexec.ApplyParams{
+		Vars: input.Vars,
+		Env:  w.env,
+	}); err != nil {
+		return ApplyOutput{}, fmt.Errorf("terraform apply error: %w", err)
+	}
+
+	// Extract output from successful Terraform Apply
+	output, err := makeApplyOutput(ctx, w.env, tf)
+	if err != nil {
+		return ApplyOutput{}, err
+	}
+
+	return output, nil
 }
 
 func (w *Workspace) Destroy(ctx context.Context, input DestroyInput) error {

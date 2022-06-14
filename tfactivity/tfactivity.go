@@ -18,6 +18,16 @@ func New(wsConfig tfworkspace.Config) *Activity {
 	return &Activity{config: wsConfig}
 }
 
+func (a *Activity) Plan(ctx context.Context, input tfworkspace.ApplyInput) (tfworkspace.ApplyOutput, error) {
+	logger := activity.GetLogger(ctx)
+	ctx, cancel := heartbeat.Begin(ctx, 10*time.Second)
+	defer cancel()
+
+	logger.Info("terraform activity plan", "TerraformPath", a.config.TerraformPath)
+	// Blocking call that returns when terraform exits
+	return tfworkspace.New(a.config).Plan(ctx, input)
+}
+
 func (a *Activity) Apply(ctx context.Context, input tfworkspace.ApplyInput) (tfworkspace.ApplyOutput, error) {
 	logger := activity.GetLogger(ctx)
 	ctx, cancel := heartbeat.Begin(ctx, 10*time.Second)

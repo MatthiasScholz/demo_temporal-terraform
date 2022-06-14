@@ -31,7 +31,7 @@ type UnitTestSuite struct {
 // }
 //
 //func (s *UnitTestSuite) Test_Apply(t *testing.T) {
-func Test_Apply(t *testing.T) {
+func Test_Plan(t *testing.T) {
 	vars := map[string]interface{}{
 		"cidr_block": "10.0.0.0/16",
 		"name":       "Test_Apply",
@@ -52,8 +52,8 @@ func Test_Apply(t *testing.T) {
 
 	suite := UnitTestSuite{}
 	suite.env = suite.NewTestActivityEnvironment()
-	suite.env.RegisterActivity(a.Apply)
-	result, err := suite.env.ExecuteActivity(a.Apply, input)
+	suite.env.RegisterActivity(a.Plan)
+	result, err := suite.env.ExecuteActivity(a.Plan, input)
 
 	if err != nil {
 		t.Fatalf("An error occured during execution: %e", err)
