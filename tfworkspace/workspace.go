@@ -24,7 +24,7 @@ type (
 		Env            map[string]string
 		Vars           map[string]interface{}
 		AttemptImport  map[string]string
-		AwsCredentials aws.CredentialsProvider
+		AwsCredentials aws.Credentials
 	}
 
 	ApplyOutput struct {
@@ -75,15 +75,32 @@ func (w *Workspace) Apply(ctx context.Context, input ApplyInput) (ApplyOutput, e
 	}
 
 	// Add AWS creds to environment
-	if input.AwsCredentials != nil {
-		creds, err := input.AwsCredentials.Retrieve(ctx)
-		if err != nil {
-			return ApplyOutput{}, err
-		}
-		env["AWS_ACCESS_KEY_ID"] = creds.AccessKeyID
-		env["AWS_SECRET_ACCESS_KEY"] = creds.SecretAccessKey
-		env["AWS_SESSION_TOKEN"] = creds.SessionToken
+	// if input.AwsCredentials != nil {
+	// 	creds, err := input.AwsCredentials.Retrieve(ctx)
+	// 	if err != nil {
+	// 		return ApplyOutput{}, err
+	// 	}
+	// 	env["AWS_ACCESS_KEY_ID"] = creds.AccessKeyID
+	// 	env["AWS_SECRET_ACCESS_KEY"] = creds.SecretAccessKey
+	// 	env["AWS_SESSION_TOKEN"] = creds.SessionToken
+	// } else {
+	// 	// Use environment variables
+	// 	log.Printf("using environment variables for AWS credential: %s", os.Getenv("AWS_PROFILE"))
+	// 	env["AWS_PROFILE"] = os.Getenv("AWS_PROFILE")
+	// 	// env["AWS_ACCESS_KEY_ID"] = os.Getenv("AWS_ACCESS_KEY_ID")
+	// 	// env["AWS_SECRET_ACCESS_KEY"] = os.Getenv("AWS_SECRET_ACCESS_KEY")
+	// 	// env["AWS_SESSION_TOKEN"] = os.Getenv("AWS_SESSION_TOKEN")
+	// }
+	if !input.AwsCredentials.HasKeys() {
+		log.Fatal("no aws credentials provided")
 	}
+	if input.AwsCredentials.Expired() {
+		log.Fatal("aws credentials expired")
+	}
+
+	env["AWS_ACCESS_KEY_ID"] = input.AwsCredentials.AccessKeyID
+	env["AWS_SECRET_ACCESS_KEY"] = input.AwsCredentials.SecretAccessKey
+	env["AWS_SESSION_TOKEN"] = input.AwsCredentials.SessionToken
 
 	// Attempt to import resources that may have not had state pushed on failure
 	for k, v := range input.AttemptImport {
@@ -187,7 +204,7 @@ func (w *Workspace) init(ctx context.Context, workDir string) (*tfexec.Terraform
 	}
 
 	initParams := tfexec.InitParams{
-		Backend: w.config.S3Backend,
+		// TODO Make configurable Backend: w.config.S3Backend,
 	}
 	err = tf.Init(ctx, initParams)
 	if err != nil {

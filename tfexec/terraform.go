@@ -13,6 +13,7 @@ import (
 	"text/template"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	//"github.com/dynajoe/temporal-terraform-demo/config/awsconfig"
 )
 
 type (
@@ -71,7 +72,9 @@ type (
 	}
 )
 
-var backendConfigTemplate = template.Must(template.New("terraform backend config").Parse(`
+// FIXME support local backend - but check if this is possible with distributed workers ...
+// TODO Support Terraform Cloud
+var s3backendConfigTemplate = template.Must(template.New("terraform backend config").Parse(`
 terraform {
 	backend "s3" {
       encrypt    = true
@@ -82,6 +85,18 @@ terraform {
 	  secret_key = "{{ .SecretKey }}"
 	  token      = "{{ .Token }}"
 	}
+}
+`))
+
+var cloudBackendConfigTemplate = template.Must(template.New("terraform backend config").Parse(`
+terraform {
+  cloud {
+    organization = "homeserver"
+
+    workspaces {
+      name = "temporal"
+    }
+  }
 }
 `))
 
@@ -102,15 +117,14 @@ func LazyFromPath() NewTerraformFunc {
 	}
 }
 
-func (t *Terraform) Init(ctx context.Context, params InitParams) error {
+func InitS3Backend(configBuf *bytes.Buffer, ctx context.Context, params InitParams) error {
 	creds, err := params.Backend.Credentials.Retrieve(ctx)
 	if err != nil {
 		return err
 	}
 
 	// Ensure backend is configured for s3
-	configBuf := bytes.Buffer{}
-	if err := backendConfigTemplate.Execute(&configBuf, s3BackendConfigTemplateVars{
+	if err := s3backendConfigTemplate.Execute(configBuf, s3BackendConfigTemplateVars{
 		Bucket:    params.Backend.Bucket,
 		Key:       params.Backend.Key,
 		Region:    params.Backend.Region,
@@ -118,12 +132,34 @@ func (t *Terraform) Init(ctx context.Context, params InitParams) error {
 		SecretKey: creds.SecretAccessKey,
 		Token:     creds.SessionToken,
 	}); err != nil {
-		return fmt.Errorf("error creating backend config: %w", err)
+		return fmt.Errorf("error creating s3 backend config: %w", err)
 	}
 
-	if err := os.WriteFile(path.Join(t.workDir, "_backend.tf"), configBuf.Bytes(), os.ModePerm); err != nil {
-		return err
+	return nil
+}
+
+func InitCloudBackend(configBuf *bytes.Buffer) error {
+	if err := cloudBackendConfigTemplate.Execute(configBuf, nil); err != nil {
+		return fmt.Errorf("error creating cloud backend config: %w", err)
 	}
+
+	return nil
+}
+
+func (t *Terraform) Init(ctx context.Context, params InitParams) error {
+	// configBuf := bytes.Buffer{}
+
+	// TODO Provide support to switch the backend configuration
+	//if err := InitS3Backend(&configBuf, ctx, params); err != nil {
+	//	return err
+	//}
+	// if err := InitCloudBackend(&configBuf); err != nil {
+	// 	return err
+	// }
+
+	// if err := os.WriteFile(path.Join(t.workDir, "_backend.tf"), configBuf.Bytes(), os.ModePerm); err != nil {
+	// 	return err
+	// }
 
 	execParams := t.terraformParams([]string{"init", "-no-color"}, params.Backend.Env)
 	if err := terraformExec(ctx, execParams); err != nil {
