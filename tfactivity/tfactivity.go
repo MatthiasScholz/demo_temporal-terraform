@@ -25,6 +25,7 @@ func (a *Activity) Plan(ctx context.Context, input tfworkspace.ApplyInput) (tfwo
 
 	logger.Info("terraform activity plan", "TerraformPath", a.config.TerraformPath)
 	// Blocking call that returns when terraform exits
+	// FIXME blocked: return tfworkspace.New(a.config).PlanNew(ctx, input)
 	return tfworkspace.New(a.config).Plan(ctx, input)
 }
 

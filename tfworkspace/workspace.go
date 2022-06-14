@@ -12,6 +12,12 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/dynajoe/temporal-terraform-demo/tfexec"
+
+	// NOTE replacement for custom wrapper tfexec
+	//"github.com/hashicorp/go-version"
+	//"github.com/hashicorp/hc-install/product"
+	//"github.com/hashicorp/hc-install/releases"
+	terraformexec "github.com/hashicorp/terraform-exec/tfexec"
 )
 
 type (
@@ -39,10 +45,11 @@ type (
 	}
 
 	Workspace struct {
-		config  Config
-		env     Environment
-		workDir string
-		tf      tfexec.NewTerraformFunc
+		config   Config
+		env      Environment
+		workDir  string
+		execPath string
+		tf       tfexec.NewTerraformFunc
 	}
 )
 
@@ -169,6 +176,58 @@ func (w *Workspace) Prepare(ctx context.Context, input ApplyInput, name string) 
 func (w *Workspace) Cleanup() error {
 	err := cleanupWorkspace(w.workDir)
 	return err
+}
+
+func (w *Workspace) PlanNew(ctx context.Context, input ApplyInput) (ApplyOutput, error) {
+	w.execPath = "/usr/local/bin/terraform"
+	workdir, err := prepareWorkspace("apply")
+	if err != nil {
+		return ApplyOutput{}, err
+	}
+	w.workDir = workdir
+
+	err = extractEmbeddedTerraform(w.config.TerraformFS, w.config.TerraformPath, w.workDir)
+	if err != nil {
+		return ApplyOutput{}, err
+	}
+
+	tf, err := terraformexec.NewTerraform(w.workDir, w.execPath)
+	if err != nil {
+		return ApplyOutput{}, err
+	}
+
+	env, err := prepareEnv(input)
+	if err != nil {
+		return ApplyOutput{}, err
+	}
+	err = tf.SetEnv(env)
+	if err != nil {
+		return ApplyOutput{}, err
+	}
+
+	// FIXME currently blocked because of the usage of Terraform Cloud
+	//       https://github.com/hashicorp/terraform-exec/pull/268
+	err = tf.Init(ctx, terraformexec.Upgrade(true))
+	if err != nil {
+		return ApplyOutput{}, err
+	}
+	var options []terraformexec.PlanOption
+	options = append(options, terraformexec.Out(w.workDir))
+	changes, err := tf.Plan(ctx, options...)
+	if err != nil {
+		return ApplyOutput{}, err
+	}
+	plan, err := tf.ShowPlanFile(ctx, w.workDir)
+	if err != nil {
+		return ApplyOutput{}, err
+	}
+
+	// TODO convert plan to ApplyOutput
+	output := ApplyOutput{}
+	output.Output["Changes"] = changes
+	output.Output["TerraformVersion"] = plan.TerraformVersion
+
+	return ApplyOutput{}, nil
 }
 
 func (w *Workspace) Plan(ctx context.Context, input ApplyInput) (ApplyOutput, error) {
