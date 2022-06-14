@@ -22,23 +22,23 @@ type UnitTestSuite struct {
 	env *testsuite.TestActivityEnvironment
 }
 
-// func TestUnitTestSuite(t *testing.T) {
-// 	suite.Run(t, new(UnitTestSuite))
-// }
-//
-// func (s *UnitTestSuite) SetupTest() {
-// 	s.env = s.NewTestActivityEnvironment()
-// }
-//
-//func (s *UnitTestSuite) Test_Apply(t *testing.T) {
-func Test_Plan(t *testing.T) {
+func TestUnitTestSuite(t *testing.T) {
+	suite.Run(t, new(UnitTestSuite))
+}
+
+func (s *UnitTestSuite) SetupTest() {
+	s.env = s.NewTestActivityEnvironment()
+}
+
+func (s *UnitTestSuite) Test_Plan() {
+	// Prepare
 	vars := map[string]interface{}{
 		"cidr_block": "10.0.0.0/16",
 		"name":       "Test_Apply",
 	}
 	creds, err := awsconfig.LoadConfig("tw-beach-push").Credentials.Retrieve(context.Background())
 	if err != nil {
-		t.Fatalf("failed to retrieve aws credentials: %e", err)
+		s.FailNowf("credentials", "failed to retrieve aws credentials: %e", err)
 	}
 	input := tfworkspace.ApplyInput{
 		Vars:           vars,
@@ -49,21 +49,12 @@ func Test_Plan(t *testing.T) {
 		TerraformFS:   terraform.FS,
 	}
 	a := New(ws)
+	s.env.RegisterActivity(a.Plan)
 
-	suite := UnitTestSuite{}
-	suite.env = suite.NewTestActivityEnvironment()
-	suite.env.RegisterActivity(a.Plan)
-	result, err := suite.env.ExecuteActivity(a.Plan, input)
+	// Execute
+	result, err := s.env.ExecuteActivity(a.Plan, input)
 
-	if err != nil {
-		t.Fatalf("An error occured during execution: %e", err)
-	}
-	if !result.HasValue() {
-		t.Fatalf("Result as no value: %v, %e", result, err)
-	}
-	//s.env.RegisterActivity(a.Apply)
-	//result, err := s.env.ExecuteActivity(a.Apply, input)
-
-	//s.True(result.HasValue())
-	//s.NoError(err)
+	// Verify
+	s.True(result.HasValue())
+	s.NoError(err)
 }
