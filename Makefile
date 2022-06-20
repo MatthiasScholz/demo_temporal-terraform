@@ -13,6 +13,12 @@ lint:
 build: deps
 	go build -v ./...
 
+worker:
+	go run cmd/main.go
+
+signal: deps
+	go run client/network.go
+
 test: deps
 	AWS_PROFILE=$(profile) go test ./...
 
