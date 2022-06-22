@@ -17,9 +17,9 @@ func main() {
 	}
 	signal := workflows.CreateNetworkRequestSignal{
 		// Failure:
-		Message: "Message from the client",
+		//Message: "Message from the client which cause a failure, since it does not match the expected message.",
 		// Sucess:
-		//Message: "SOME VALUE",
+		Message: "Expected Message",
 	}
 
 	temporalClient, err := client.NewClient(client.Options{})

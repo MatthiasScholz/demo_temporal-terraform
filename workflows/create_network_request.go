@@ -37,7 +37,8 @@ func CreateNetworkRequestWorkflow(ctx workflow.Context, input *CreateNetworkRequ
 	logger.Info("Recieved message: ", signal.Message)
 
 	// Some dummy message condition
-	if len(signal.Message) > 0 && signal.Message != "SOME VALUE" {
+	expectedInput := "Expected Message"
+	if len(signal.Message) > 0 && signal.Message != expectedInput {
 		logger.Error("Invalid value for message: ", signal.Message)
 		return nil, errors.New("signal")
 	}
