@@ -8,3 +8,4 @@
 *.tfstate
 *.tfstate.backup
 *.tfvars.json
+/temporalite.db
