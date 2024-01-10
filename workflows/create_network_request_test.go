@@ -53,3 +53,7 @@ func (s *UnitTestSuite) Test_SimpleWorkflow_ActivityParamCorrect() {
 	s.True(s.env.IsWorkflowCompleted())
 	s.NoError(s.env.GetWorkflowError())
 }
+
+func (s *UnitTestSuite) Test_SignalWorklflow() {
+
+}

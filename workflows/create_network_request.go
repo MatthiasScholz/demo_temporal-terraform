@@ -17,8 +17,10 @@ type CreateNetworkRequestWorkflowResult struct {
 	NetworkCIDR string
 }
 
-const CreateNetworkRequestTaskQueue = "CreateNetworkRequestTaskQueue"
-const CreateNetworkRequestSignalChannelName = "CreateNetworkRequestSignalChannelName"
+const (
+	CreateNetworkRequestTaskQueue         = "CreateNetworkRequestTaskQueue"
+	CreateNetworkRequestSignalChannelName = "CreateNetworkRequestSignalChannelName"
+)
 
 type CreateNetworkRequestSignal struct {
 	Message string

@@ -22,11 +22,15 @@ func main() {
 		Message: "Expected Message",
 	}
 
-	temporalClient, err := client.NewClient(client.Options{})
+	temporalClient, err := client.NewClient(client.Options{
+		Namespace: "default",
+		HostPort:  "127.0.0.1:7233",
+	})
 	if err != nil {
 		log.Fatalln("Unable to create client", err)
 		return
 	}
+
 	input := workflows.CreateNetworkRequestWorkflowInput{NetworkName: "signal_network"}
 	// NOTE: Sending a signal to an ALREADY running workflow
 	// err := temporalClient.SignalWorkflow(

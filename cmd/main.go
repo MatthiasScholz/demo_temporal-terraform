@@ -19,9 +19,14 @@ func main() {
 		log.Fatal(err.Error())
 	}
 
-	temporalWorker := worker.New(serviceClient, "temporal-terraform-demo", worker.Options{
-		WorkerStopTimeout: 30 * time.Second,
-	})
+	temporalWorker := worker.New(
+		serviceClient,
+		//"temporal-terraform-demo",
+		workflows.CreateNetworkRequestTaskQueue,
+		worker.Options{
+			WorkerStopTimeout: 30 * time.Second,
+		},
+	)
 
 	log.Print("registering workflows")
 	workflows.Register(temporalWorker)
